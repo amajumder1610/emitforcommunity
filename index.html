@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com; img-src 'self'; style-src 'self'; script-src 'self';">
+<title>EMIT — Embeddable Media Ingest Tool</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <h1>EMIT</h1>
+      <p class="subtitle">Embeddable Media Ingest Tool — upload a video, get a shareable GitHub Pages link.</p>
+    </header>
+
+    <section id="section-token" class="card">
+      <h2>1. Connect to GitHub</h2>
+      <label for="token-input">Personal access token</label>
+      <div class="row">
+        <input id="token-input" type="password" autocomplete="off" placeholder="ghp_..." />
+        <button id="token-toggle" type="button" class="btn-secondary">Show</button>
+      </div>
+      <label class="checkbox-row">
+        <input id="token-remember" type="checkbox" />
+        <span>Remember on this device (stored in this browser's local storage — anyone with access to this browser profile could read it; only enable on a personal device)</span>
+      </label>
+      <button id="token-connect" type="button" class="btn-primary">Connect</button>
+      <p id="token-status" class="status" role="status"></p>
+    </section>
+
+    <section id="section-repo" class="card" hidden>
+      <h2>2. Choose a repository</h2>
+      <div class="row">
+        <div class="field">
+          <label for="repo-owner">Owner</label>
+          <input id="repo-owner" type="text" placeholder="your-username-or-org" />
+        </div>
+        <div class="field">
+          <label for="repo-name">Repository</label>
+          <input id="repo-name" type="text" placeholder="my-media-repo" />
+        </div>
+      </div>
+      <label class="checkbox-row">
+        <input id="repo-private" type="checkbox" />
+        <span>Create as private (private repos may need a paid GitHub plan for Pages to be publicly viewable — verify on your account first)</span>
+      </label>
+      <button id="repo-connect" type="button" class="btn-primary">Connect / create</button>
+      <p id="repo-status" class="status" role="status"></p>
+      <p id="repo-size" class="status-muted"></p>
+    </section>
+
+    <section id="section-upload" class="card" hidden>
+      <h2>3. Upload a video</h2>
+      <label for="video-title">Title</label>
+      <input id="video-title" type="text" placeholder="Q3 customer story" />
+
+      <label for="video-description">Description (optional)</label>
+      <textarea id="video-description" rows="3" placeholder="A short description shown on the page"></textarea>
+
+      <label for="video-file">Video file</label>
+      <input id="video-file" type="file" accept="video/*" />
+      <p id="video-file-info" class="status-muted"></p>
+
+      <button id="video-upload" type="button" class="btn-primary">Upload</button>
+      <p id="upload-status" class="status" role="status"></p>
+    </section>
+
+    <section id="section-result" class="card" hidden>
+      <h2>Done</h2>
+      <p>Your video page:</p>
+      <div class="row">
+        <input id="result-url" type="text" readonly />
+        <button id="result-copy" type="button" class="btn-secondary">Copy</button>
+      </div>
+      <p id="result-note" class="status-muted"></p>
+      <div class="row">
+        <a id="result-open" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary">Open link</a>
+        <button id="result-recheck" type="button" class="btn-secondary">Check if it's live</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
