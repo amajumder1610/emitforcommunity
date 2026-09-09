@@ -6,10 +6,7 @@ export function buildVideoPageHtml({ title, description, videoFileName }) {
   const safeDescriptionHtml = rawDescription ? escapeHtml(rawDescription).replace(/\n/g, '<br>') : '';
   const safeVideoSrc = encodeURIComponent(videoFileName);
 
-  // frame-ancestors is deliberately permissive: this page exists to be
-  // embedded elsewhere (Gainsight, etc.) — that's the "Embeddable" in EMIT.
-  const csp =
-    "default-src 'self'; script-src 'none'; base-uri 'none'; frame-ancestors *;";
+  const csp = "default-src 'self'; script-src 'none'; base-uri 'none'; frame-ancestors *;";
 
   return `<!DOCTYPE html>
 <html lang="en">

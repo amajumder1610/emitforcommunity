@@ -3,10 +3,9 @@ import { slugify, withSuffix } from './slug.js';
 import { encodeFileToBase64, encodeTextToBase64 } from './base64.js';
 import { buildVideoPageHtml } from './video-page-template.js';
 
-const TOKEN_STORAGE_KEY = 'emit.github.token';
+const TOKEN_STORAGE_KEY = 'emit.passphrase';
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const WARN_FILE_BYTES = 50 * 1024 * 1024;
-const PAGES_SOFT_LIMIT_MB = 1024;
 
 const el = (id) => document.getElementById(id);
 
@@ -22,7 +21,6 @@ const repoNameInput = el('repo-name');
 const repoPrivateCheckbox = el('repo-private');
 const repoConnectBtn = el('repo-connect');
 const repoStatus = el('repo-status');
-const repoSizeEl = el('repo-size');
 
 const uploadSection = el('section-upload');
 const videoTitleInput = el('video-title');
@@ -41,7 +39,7 @@ const resultRecheckBtn = el('result-recheck');
 
 let client = null;
 let authUser = null;
-let connectedRepo = null; // { owner, repoName, defaultBranch, pagesUrl }
+let connectedRepo = null;
 
 function setStatus(target, message, kind = 'info') {
   target.textContent = message;
@@ -68,13 +66,14 @@ function getFileExtension(file) {
 }
 
 function describeError(err) {
+  console.error(err);
   if (err instanceof GitHubApiError) {
-    if (err.isNetworkError) return err.message;
-    if (err.status === 401) return 'That token was rejected by GitHub (invalid or expired). Generate a new one and try again.';
-    if (err.retryAfterSeconds) return `${err.githubMessage || 'Rate limited by GitHub.'} Try again in about ${err.retryAfterSeconds}s.`;
-    return err.githubMessage || err.message;
+    if (err.isNetworkError) return 'Could not connect. Check your connection and try again.';
+    if (err.status === 401) return "That passphrase wasn't accepted. Please check it and try again.";
+    if (err.retryAfterSeconds) return `Please wait about ${err.retryAfterSeconds}s and try again.`;
+    return 'Something went wrong. Please try again.';
   }
-  return err?.message || String(err);
+  return err?.message || 'Something went wrong. Please try again.';
 }
 
 function loadStoredToken() {
@@ -89,7 +88,7 @@ function storeToken(token, remember) {
 
 async function connectToken(token, { silent = false } = {}) {
   if (!token) {
-    setStatus(tokenStatus, 'Paste a personal access token first.', 'error');
+    setStatus(tokenStatus, 'Enter your passphrase first.', 'error');
     return;
   }
   setBusy(tokenConnectBtn, true, 'Connecting…', 'Connect');
@@ -100,7 +99,7 @@ async function connectToken(token, { silent = false } = {}) {
     client = candidateClient;
     authUser = user;
     storeToken(token, tokenRemember.checked);
-    setStatus(tokenStatus, `Connected as ${user.login}.`, 'success');
+    setStatus(tokenStatus, 'Connected.', 'success');
     repoOwnerInput.value = repoOwnerInput.value || user.login;
     repoSection.hidden = false;
   } catch (err) {
@@ -125,25 +124,19 @@ async function ensurePagesReady(owner, repoName, defaultBranch) {
 
   if (!pages) {
     pages = await client.enablePages(owner, repoName, defaultBranch, '/');
-    setStatus(repoStatus, 'Repository connected. GitHub Pages was just enabled — the first build can take a couple of minutes.', 'success');
+    setStatus(repoStatus, 'Connected. This may take a few minutes to finish setting up.', 'success');
   } else if (pages.build_type === 'workflow') {
-    throw new Error(
-      "This repo's GitHub Pages is configured for a custom GitHub Actions workflow, which EMIT doesn't support. Reconfigure Pages to deploy from a branch, or connect a different repo."
-    );
+    throw new Error("This destination can't be used right now. Please choose a different one.");
   } else if (pages.source && pages.source.branch !== defaultBranch) {
-    setStatus(
-      repoStatus,
-      `Connected, but heads up: Pages is currently serving the "${pages.source.branch}" branch, not "${defaultBranch}" — new uploads may not show up until that's reconciled.`,
-      'error'
-    );
+    setStatus(repoStatus, "Connected, but this destination may not update correctly. Consider using a different one.", 'error');
   } else {
-    setStatus(repoStatus, 'Repository connected. GitHub Pages is already enabled.', 'success');
+    setStatus(repoStatus, 'Connected.', 'success');
   }
 
-  const nojekyll = await client.getFileMeta(owner, repoName, '.nojekyll');
-  if (!nojekyll) {
+  const marker = await client.getFileMeta(owner, repoName, '.nojekyll');
+  if (!marker) {
     await client.putFileContents(owner, repoName, '.nojekyll', {
-      message: 'Add .nojekyll (disable Jekyll processing)',
+      message: 'Initial setup',
       contentBase64: '',
       branch: defaultBranch,
     });
@@ -154,21 +147,17 @@ async function ensurePagesReady(owner, repoName, defaultBranch) {
 
 async function connectRepo(owner, repoName, makePrivate) {
   if (!client) {
-    setStatus(repoStatus, 'Connect a token first.', 'error');
+    setStatus(repoStatus, 'Connect first.', 'error');
     return;
   }
   if (!owner || !repoName) {
-    setStatus(repoStatus, 'Enter both an owner and a repository name.', 'error');
+    setStatus(repoStatus, 'Enter both fields to continue.', 'error');
     return;
   }
 
-  setBusy(repoConnectBtn, true, 'Connecting…', 'Connect / create');
-  setStatus(repoStatus, 'Checking repository…');
-  // Pessimistically drop any previously-connected repo for the duration of this
-  // attempt, so a failure here can never leave the upload flow silently pointed
-  // at a stale (and possibly now-irrelevant) repo from an earlier connection.
+  setBusy(repoConnectBtn, true, 'Connecting…', 'Continue');
+  setStatus(repoStatus, 'Checking…');
   connectedRepo = null;
-  repoSizeEl.textContent = '';
   uploadSection.hidden = true;
   resultSection.hidden = true;
   try {
@@ -177,33 +166,26 @@ async function connectRepo(owner, repoName, makePrivate) {
     if (!repo) {
       try {
         if (owner.toLowerCase() === authUser.login.toLowerCase()) {
-          setStatus(repoStatus, 'Repository not found — creating it…');
+          setStatus(repoStatus, 'Setting up…');
           repo = await client.createUserRepo(repoName, { isPrivate: makePrivate });
         } else {
           const accountType = await client.getAccountType(owner);
           if (accountType === 'Organization') {
-            setStatus(repoStatus, 'Repository not found — creating it in that organization…');
+            setStatus(repoStatus, 'Setting up…');
             repo = await client.createOrgRepo(owner, repoName, { isPrivate: makePrivate });
-          } else if (accountType === 'User') {
-            throw new Error(`"${owner}" is another user's account — repos can only be created under your own account or an organization you belong to.`);
           } else {
-            throw new Error(`Couldn't find a GitHub user or organization named "${owner}".`);
+            throw new Error("Couldn't find that account. Check the details and try again.");
           }
         }
       } catch (err) {
-        // Fine-grained tokens can't create repos at all (GitHub only supports
-        // classic PATs/OAuth for POST /user/repos and /orgs/{org}/repos), so a
-        // permission-shaped failure here is almost always that, not a fluke.
         if (err instanceof GitHubApiError && (err.status === 403 || err.status === 404)) {
-          throw new Error(
-            `Couldn't create "${repoName}" — if you're using a fine-grained personal access token, GitHub doesn't support repo creation with that token type. Create the repository yourself on github.com, then connect again. (A classic token with "repo" scope can create it automatically instead.)`
-          );
+          throw new Error("Couldn't set that up automatically. Ask whoever manages this tool to create it, then try again.");
         }
         throw err;
       }
     }
 
-    setStatus(repoStatus, 'Repository ready. Checking GitHub Pages…');
+    setStatus(repoStatus, 'Almost there…');
     const pages = await ensurePagesReady(owner, repo.name, repo.default_branch);
 
     connectedRepo = {
@@ -213,14 +195,11 @@ async function connectRepo(owner, repoName, makePrivate) {
       pagesUrl: pages.html_url,
     };
 
-    const sizeMb = (repo.size || 0) / 1024;
-    repoSizeEl.textContent = `Repo size: ~${sizeMb.toFixed(1)} MB of the ~${PAGES_SOFT_LIMIT_MB} MB GitHub Pages source-repo guideline.`;
-
     uploadSection.hidden = false;
   } catch (err) {
     setStatus(repoStatus, describeError(err), 'error');
   } finally {
-    setBusy(repoConnectBtn, false, 'Connecting…', 'Connect / create');
+    setBusy(repoConnectBtn, false, 'Connecting…', 'Continue');
   }
 }
 
@@ -250,14 +229,14 @@ async function findFreeSlug(owner, repoName, baseSlug, ext) {
     if (!videoMeta && !pageMeta) return { slug: candidate, resumeVideoOnly: false };
     if (videoMeta && !pageMeta) return { slug: candidate, resumeVideoOnly: true };
   }
-  throw new Error('Could not find an available URL slug for this title — try a more specific title.');
+  throw new Error("Couldn't find an available name for this upload — try a different title.");
 }
 
 function showResult(url, owner, repoName) {
   resultSection.hidden = false;
   resultUrlInput.value = url;
   resultOpenLink.href = url;
-  resultNote.textContent = "GitHub Pages can take a minute or two to build after the first upload. If the link 404s at first, wait a bit and check again.";
+  resultNote.textContent = "This may take a minute or two to go live. If the link doesn't work yet, try again shortly.";
   resultSection.dataset.owner = owner;
   resultSection.dataset.repoName = repoName;
   resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -265,7 +244,7 @@ function showResult(url, owner, repoName) {
 
 async function uploadVideo(title, description, file) {
   if (!connectedRepo) {
-    setStatus(uploadStatus, 'Connect a repository first.', 'error');
+    setStatus(uploadStatus, 'Choose a destination first.', 'error');
     return;
   }
   if (!file) {
@@ -273,7 +252,7 @@ async function uploadVideo(title, description, file) {
     return;
   }
   if (file.size > MAX_FILE_BYTES) {
-    setStatus(uploadStatus, `That file is ${formatBytes(file.size)} — GitHub's API caps individual files at 100MB. Trim the video and try again.`, 'error');
+    setStatus(uploadStatus, 'This video is too large. Please use a smaller file.', 'error');
     return;
   }
 
@@ -284,7 +263,7 @@ async function uploadVideo(title, description, file) {
   setBusy(videoUploadBtn, true, 'Uploading…', 'Upload');
   try {
     if (file.size > WARN_FILE_BYTES) {
-      setStatus(uploadStatus, `Heads up: ${formatBytes(file.size)} is a large file for this tool — it may be slow to encode/upload.`);
+      setStatus(uploadStatus, 'This is a large file — it may take a while.');
     }
 
     const baseSlug = slugify(effectiveTitle);
@@ -293,21 +272,21 @@ async function uploadVideo(title, description, file) {
     const pagePath = `media/${slug}/index.html`;
 
     if (!resumeVideoOnly) {
-      setStatus(uploadStatus, 'Encoding video…');
+      setStatus(uploadStatus, 'Preparing…');
       const contentBase64 = await encodeFileToBase64(file, (fraction) => {
-        setStatus(uploadStatus, `Encoding video… ${Math.round(fraction * 100)}%`);
+        setStatus(uploadStatus, `Preparing… ${Math.round(fraction * 100)}%`);
       });
-      setStatus(uploadStatus, 'Uploading video to GitHub…');
+      setStatus(uploadStatus, 'Uploading…');
       await client.putFileContents(owner, repoName, videoPath, {
         message: `Add video: ${effectiveTitle}`,
         contentBase64,
         branch: defaultBranch,
       });
     } else {
-      setStatus(uploadStatus, 'Video already uploaded from a previous attempt — finishing the page…');
+      setStatus(uploadStatus, 'Finishing up…');
     }
 
-    setStatus(uploadStatus, 'Publishing page…');
+    setStatus(uploadStatus, 'Publishing…');
     const pageHtml = buildVideoPageHtml({ title: effectiveTitle, description, videoFileName: `video.${ext}` });
     await client.putFileContents(owner, repoName, pagePath, {
       message: `Add page for: ${effectiveTitle}`,
@@ -347,17 +326,17 @@ resultRecheckBtn.addEventListener('click', async () => {
   try {
     const pages = await client.getPagesInfo(owner, repoName);
     if (pages?.status === 'built') {
-      resultNote.textContent = 'Live and built.';
+      resultNote.textContent = "It's live.";
     } else if (pages?.status === 'errored') {
-      resultNote.textContent = "GitHub Pages reported a build error — check the repository's Pages settings on github.com.";
+      resultNote.textContent = 'Something went wrong. Please try again.';
     } else {
-      resultNote.textContent = 'Still building — your files are safely committed either way. Try again shortly.';
+      resultNote.textContent = 'Still on its way — try again shortly.';
     }
   } catch (err) {
     resultNote.textContent = describeError(err);
   } finally {
     resultRecheckBtn.disabled = false;
-    resultRecheckBtn.textContent = "Check if it's live";
+    resultRecheckBtn.textContent = 'Check again';
   }
 });
 

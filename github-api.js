@@ -31,7 +31,7 @@ export function createGitHubClient(token) {
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch {
-      throw new GitHubApiError('Network error contacting GitHub. Check your connection and try again.', { isNetworkError: true });
+      throw new GitHubApiError('Network error. Check your connection and try again.', { isNetworkError: true });
     }
 
     const text = await response.text();
@@ -46,7 +46,7 @@ export function createGitHubClient(token) {
 
     if (!response.ok) {
       const retryAfterHeader = response.headers.get('retry-after');
-      throw new GitHubApiError(data?.message || `GitHub API request failed (${response.status})`, {
+      throw new GitHubApiError(data?.message || `Request failed (${response.status})`, {
         status: response.status,
         githubMessage: data?.message ?? null,
         retryAfterSeconds: retryAfterHeader ? Number(retryAfterHeader) : null,
@@ -56,9 +56,6 @@ export function createGitHubClient(token) {
     return data;
   }
 
-  // A 404 is only ever "doesn't exist yet" for lookups, never for writes —
-  // callers that write must see it as a real error, so this helper is opt-in
-  // per call rather than baked into request() itself.
   async function getOrNull(path) {
     try {
       return await request('GET', path);

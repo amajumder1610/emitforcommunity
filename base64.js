@@ -1,6 +1,4 @@
-// Chunk size must be a multiple of 3: base64 turns every 3 input bytes into
-// 4 output chars with no padding, so a non-multiple-of-3 chunk boundary would
-// insert a stray '=' mid-stream and corrupt the joined result.
+// Must stay a multiple of 3 (base64 encodes in 3-byte groups).
 const CHUNK_BYTES = 6 * 1024 * 1024;
 
 function bytesToBinaryString(bytes) {

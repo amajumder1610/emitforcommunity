@@ -4,55 +4,52 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com; img-src 'self'; style-src 'self'; script-src 'self';">
-<title>EMIT — Embeddable Media Ingest Tool</title>
+<title>EMIT</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="page">
-    <header class="page-header">
-      <h1>EMIT</h1>
-      <p class="subtitle">Embeddable Media Ingest Tool — upload a video, get a shareable GitHub Pages link.</p>
-    </header>
+  <div class="hero">
+    <h1>EMIT</h1>
+    <p class="tagline">Share a video with a link.</p>
+  </div>
 
+  <main class="page">
     <section id="section-token" class="card">
-      <h2>1. Connect to GitHub</h2>
-      <label for="token-input">Personal access token</label>
+      <p class="prompt">Connect using passphrase</p>
       <div class="row">
-        <input id="token-input" type="password" autocomplete="off" placeholder="github_pat_..." />
+        <input id="token-input" type="password" autocomplete="off" placeholder="Passphrase" />
         <button id="token-toggle" type="button" class="btn-secondary">Show</button>
       </div>
-      <p class="status-muted">Use a <strong>fine-grained</strong> token scoped to one repository (Contents + Pages permissions) — see <a href="README.md">emit/README.md</a> for exact steps. Avoid classic tokens with account-wide <code>repo</code> scope unless you specifically need EMIT to auto-create new repos.</p>
       <label class="checkbox-row">
         <input id="token-remember" type="checkbox" />
-        <span>Remember on this device (stored in this browser's local storage — anyone with access to this browser profile could read it; only enable on a personal device)</span>
+        <span>Remember me on this device</span>
       </label>
       <button id="token-connect" type="button" class="btn-primary">Connect</button>
       <p id="token-status" class="status" role="status"></p>
     </section>
 
     <section id="section-repo" class="card" hidden>
-      <h2>2. Choose a repository</h2>
+      <h2>Destination</h2>
       <div class="row">
         <div class="field">
-          <label for="repo-owner">Owner</label>
-          <input id="repo-owner" type="text" placeholder="your-username-or-org" />
+          <label for="repo-owner">Account</label>
+          <input id="repo-owner" type="text" placeholder="account" />
         </div>
         <div class="field">
-          <label for="repo-name">Repository</label>
-          <input id="repo-name" type="text" placeholder="my-media-repo" />
+          <label for="repo-name">Project</label>
+          <input id="repo-name" type="text" placeholder="project-name" />
         </div>
       </div>
       <label class="checkbox-row">
         <input id="repo-private" type="checkbox" />
-        <span>Create as private (private repos may need a paid GitHub plan for Pages to be publicly viewable — verify on your account first)</span>
+        <span>Keep private</span>
       </label>
-      <button id="repo-connect" type="button" class="btn-primary">Connect / create</button>
+      <button id="repo-connect" type="button" class="btn-primary">Continue</button>
       <p id="repo-status" class="status" role="status"></p>
-      <p id="repo-size" class="status-muted"></p>
     </section>
 
     <section id="section-upload" class="card" hidden>
-      <h2>3. Upload a video</h2>
+      <h2>Upload</h2>
       <label for="video-title">Title</label>
       <input id="video-title" type="text" placeholder="Q3 customer story" />
 
@@ -69,7 +66,7 @@
 
     <section id="section-result" class="card" hidden>
       <h2>Done</h2>
-      <p>Your video page:</p>
+      <p>Your link:</p>
       <div class="row">
         <input id="result-url" type="text" readonly />
         <button id="result-copy" type="button" class="btn-secondary">Copy</button>
@@ -77,7 +74,7 @@
       <p id="result-note" class="status-muted"></p>
       <div class="row">
         <a id="result-open" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary">Open link</a>
-        <button id="result-recheck" type="button" class="btn-secondary">Check if it's live</button>
+        <button id="result-recheck" type="button" class="btn-secondary">Check again</button>
       </div>
     </section>
   </main>
