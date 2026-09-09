@@ -18,9 +18,10 @@
       <h2>1. Connect to GitHub</h2>
       <label for="token-input">Personal access token</label>
       <div class="row">
-        <input id="token-input" type="password" autocomplete="off" placeholder="ghp_..." />
+        <input id="token-input" type="password" autocomplete="off" placeholder="github_pat_..." />
         <button id="token-toggle" type="button" class="btn-secondary">Show</button>
       </div>
+      <p class="status-muted">Use a <strong>fine-grained</strong> token scoped to one repository (Contents + Pages permissions) — see <a href="README.md">emit/README.md</a> for exact steps. Avoid classic tokens with account-wide <code>repo</code> scope unless you specifically need EMIT to auto-create new repos.</p>
       <label class="checkbox-row">
         <input id="token-remember" type="checkbox" />
         <span>Remember on this device (stored in this browser's local storage — anyone with access to this browser profile could read it; only enable on a personal device)</span>

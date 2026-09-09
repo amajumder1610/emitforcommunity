@@ -164,23 +164,42 @@ async function connectRepo(owner, repoName, makePrivate) {
 
   setBusy(repoConnectBtn, true, 'Connecting…', 'Connect / create');
   setStatus(repoStatus, 'Checking repository…');
+  // Pessimistically drop any previously-connected repo for the duration of this
+  // attempt, so a failure here can never leave the upload flow silently pointed
+  // at a stale (and possibly now-irrelevant) repo from an earlier connection.
+  connectedRepo = null;
+  repoSizeEl.textContent = '';
+  uploadSection.hidden = true;
+  resultSection.hidden = true;
   try {
     let repo = await client.getRepo(owner, repoName);
 
     if (!repo) {
-      if (owner.toLowerCase() === authUser.login.toLowerCase()) {
-        setStatus(repoStatus, 'Repository not found — creating it…');
-        repo = await client.createUserRepo(repoName, { isPrivate: makePrivate });
-      } else {
-        const accountType = await client.getAccountType(owner);
-        if (accountType === 'Organization') {
-          setStatus(repoStatus, 'Repository not found — creating it in that organization…');
-          repo = await client.createOrgRepo(owner, repoName, { isPrivate: makePrivate });
-        } else if (accountType === 'User') {
-          throw new Error(`"${owner}" is another user's account — repos can only be created under your own account or an organization you belong to.`);
+      try {
+        if (owner.toLowerCase() === authUser.login.toLowerCase()) {
+          setStatus(repoStatus, 'Repository not found — creating it…');
+          repo = await client.createUserRepo(repoName, { isPrivate: makePrivate });
         } else {
-          throw new Error(`Couldn't find a GitHub user or organization named "${owner}".`);
+          const accountType = await client.getAccountType(owner);
+          if (accountType === 'Organization') {
+            setStatus(repoStatus, 'Repository not found — creating it in that organization…');
+            repo = await client.createOrgRepo(owner, repoName, { isPrivate: makePrivate });
+          } else if (accountType === 'User') {
+            throw new Error(`"${owner}" is another user's account — repos can only be created under your own account or an organization you belong to.`);
+          } else {
+            throw new Error(`Couldn't find a GitHub user or organization named "${owner}".`);
+          }
         }
+      } catch (err) {
+        // Fine-grained tokens can't create repos at all (GitHub only supports
+        // classic PATs/OAuth for POST /user/repos and /orgs/{org}/repos), so a
+        // permission-shaped failure here is almost always that, not a fluke.
+        if (err instanceof GitHubApiError && (err.status === 403 || err.status === 404)) {
+          throw new Error(
+            `Couldn't create "${repoName}" — if you're using a fine-grained personal access token, GitHub doesn't support repo creation with that token type. Create the repository yourself on github.com, then connect again. (A classic token with "repo" scope can create it automatically instead.)`
+          );
+        }
+        throw err;
       }
     }
 

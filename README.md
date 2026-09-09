@@ -4,21 +4,28 @@ Upload a video from your browser and get back a shareable GitHub Pages URL — n
 
 ## 1. Create a GitHub personal access token
 
-Use a **classic** token, not fine-grained — GitHub's repo-creation endpoints don't support fine-grained tokens yet, and EMIT can create a repository for you if it doesn't already exist.
+**Recommended: a fine-grained token scoped to one repository.** A classic token's `repo` scope grants access to *every* repo you can touch — if it ever leaks (shared device, browser extension, phishing), the blast radius is your whole account. A fine-grained token limited to one repo caps the damage to that repo, for however long the token is valid.
 
-1. Go to [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token** → **Generate new token (classic)**.
-2. Give it a name like `emit-tool`, set an expiration you're comfortable with.
-3. Check the **`repo`** scope (this covers reading/creating repos, enabling Pages, and committing files).
-4. Generate it and copy the token — GitHub only shows it once.
+1. Create the target repository yourself first, on github.com (fine-grained tokens can't create new repos via the API — see the note below).
+2. Go to [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens) → **Generate new token**.
+3. Under **Repository access**, choose **Only select repositories** and pick the one repo you just created.
+4. Under **Permissions → Repository permissions**, set:
+   - **Contents: Read and write**
+   - **Pages: Read and write**
+   (leave everything else as "No access" — `Metadata: Read-only` is included automatically).
+5. Set the shortest expiration that's practical for how you'll use this (e.g. 7 or 30 days, not the 366-day max).
+6. Generate it and copy the token — GitHub only shows it once.
 
-If you'd rather not grant repo-creation rights, a **fine-grained** token scoped to one existing repository with **Contents: Read & write** and **Administration: Read & write** permissions works fine too, as long as you always connect EMIT to a repo that already exists (skip the "create it" step).
+**Why you must create the repo manually first:** GitHub's repo-creation endpoints only support classic tokens/OAuth, not fine-grained ones. If you connect EMIT to a repo that doesn't exist yet using a fine-grained token, repo creation will fail with a clear error telling you to create it yourself and reconnect.
+
+**Alternative: a classic token**, if you want EMIT's "create the repo for me" step to work. Go to [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)**, check the **`repo`** scope, set an expiration. This is simpler but scopes to your entire account — only use it if you're comfortable with that trade-off, ideally on a token you delete again once you're done.
 
 ## 2. Use the tool
 
 Open `index.html` in a browser (or visit it via wherever this repo is published on GitHub Pages).
 
 1. **Paste your token** and click Connect.
-2. **Enter an owner and repository name.** If it doesn't exist yet, EMIT offers to create it (public by default — GitHub Pages needs that on the free tier to be publicly viewable). EMIT also enables GitHub Pages on it automatically.
+2. **Enter an owner and repository name.** If the repo already exists, EMIT connects and enables GitHub Pages on it automatically (public repos only, on the free tier). If it doesn't exist and you're using a classic token, EMIT offers to create it for you; with a fine-grained token, create it yourself first and EMIT will tell you so clearly if it can't.
 3. **Pick a video, give it a title** (and optional description), and click Upload.
 4. Once both the video and its page are committed, EMIT shows the shareable URL. GitHub Pages can take a minute or two to finish building the first time — use the "Check if it's live" button if the link doesn't load right away.
 
@@ -27,6 +34,8 @@ Open `index.html` in a browser (or visit it via wherever this repo is published 
 Some browsers (Chrome/Edge) block ES module imports from a plain `file://` path. If double-clicking `index.html` shows a blank page or console errors, either:
 - publish this repo to GitHub Pages and use the hosted URL instead, or
 - serve the `emit/` folder locally, e.g. `npx serve` or `python -m http.server`, then open the printed `http://localhost` URL.
+
+If you're editing the code and a change doesn't seem to take effect, hard-refresh (or open DevTools → Network tab → "Disable cache") — plain static servers don't send strong cache-busting headers, so browsers can keep serving an old cached copy of `app.js` across reloads.
 
 ## Known limits (this is intentionally a thin layer over plain GitHub, not a video hosting service)
 
