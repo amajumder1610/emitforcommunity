@@ -1,8 +1,10 @@
 import { escapeHtml } from './html-escape.js';
+import { buildOembedDiscoveryTag } from './oembed-template.js';
 
-export function buildVideoPageHtml({ title, videoFileName }) {
+export function buildVideoPageHtml({ title, videoFileName, pageUrl }) {
   const safeTitle = escapeHtml(title || 'Video');
   const safeVideoSrc = encodeURIComponent(videoFileName);
+  const oembedTag = pageUrl ? buildOembedDiscoveryTag(pageUrl) : '';
   // No default-src/style-src here on purpose: this page's CSS lives in an
   // inline <style> block, and default-src 'self' silently blocks inline
   // styles unless style-src explicitly allows them. script-src 'none' is
@@ -21,6 +23,7 @@ export function buildVideoPageHtml({ title, videoFileName }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <title>${safeTitle}</title>
+${oembedTag}
 <style>
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
   video { display: block; width: 100%; height: 100%; object-fit: cover; }

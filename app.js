@@ -2,6 +2,7 @@ import { createGitHubClient, GitHubApiError } from './github-api.js';
 import { slugify, withSuffix } from './slug.js';
 import { encodeFileToBase64, encodeTextToBase64 } from './base64.js';
 import { buildVideoPageHtml } from './video-page-template.js';
+import { buildOembedJson } from './oembed-template.js';
 import { buildEmbedCode } from './embed-template.js';
 import { looksLikeDirectVideoUrl, extractM3u8Url } from './video-url-extract.js';
 
@@ -296,6 +297,8 @@ async function uploadVideo(file) {
     const { folder, resumeVideoOnly } = await findFreeUploadFolder(owner, repoName, productSlug, ext);
     const videoPath = `${folder}/video.${ext}`;
     const pagePath = `${folder}/index.html`;
+    const oembedPath = `${folder}/oembed.json`;
+    const shareUrl = new URL(`${folder}/`, pagesUrl).toString();
 
     if (!resumeVideoOnly) {
       setStatus(uploadStatus, 'Preparing…');
@@ -313,15 +316,21 @@ async function uploadVideo(file) {
     }
 
     setStatus(uploadStatus, 'Publishing…');
-    const pageHtml = buildVideoPageHtml({ title: fileTitle, videoFileName: `video.${ext}` });
-    const pageCommit = await client.putFileContents(owner, repoName, pagePath, {
+    const pageHtml = buildVideoPageHtml({ title: fileTitle, videoFileName: `video.${ext}`, pageUrl: shareUrl });
+    await client.putFileContents(owner, repoName, pagePath, {
       message: `Add page for: ${fileTitle}`,
       contentBase64: encodeTextToBase64(pageHtml),
       branch: defaultBranch,
     });
 
-    const committedAt = pageCommit?.commit?.committer?.date || new Date().toISOString();
-    const shareUrl = new URL(`${folder}/`, pagesUrl).toString();
+    const oembedJson = buildOembedJson({ pageUrl: shareUrl, title: fileTitle });
+    const oembedCommit = await client.putFileContents(owner, repoName, oembedPath, {
+      message: `Add embed metadata for: ${fileTitle}`,
+      contentBase64: encodeTextToBase64(oembedJson),
+      branch: defaultBranch,
+    });
+
+    const committedAt = oembedCommit?.commit?.committer?.date || new Date().toISOString();
     showResult(shareUrl, { owner, repoName, committedAt });
     setStatus(uploadStatus, 'Done.', 'success');
   } catch (err) {
