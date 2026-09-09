@@ -2,44 +2,45 @@ import { createGitHubClient, GitHubApiError } from './github-api.js';
 import { slugify, withSuffix } from './slug.js';
 import { encodeFileToBase64, encodeTextToBase64 } from './base64.js';
 import { buildVideoPageHtml } from './video-page-template.js';
+import { buildEmbedCode } from './embed-template.js';
+import { looksLikeDirectVideoUrl, extractM3u8Url } from './video-url-extract.js';
 
 const TOKEN_STORAGE_KEY = 'emit.passphrase';
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const WARN_FILE_BYTES = 50 * 1024 * 1024;
+const FIXED_OWNER = 'amajumder1610';
+const FIXED_REPO = 'emitforcommunity';
 
 const el = (id) => document.getElementById(id);
 
+const tokenSection = el('section-token');
 const tokenInput = el('token-input');
 const tokenToggle = el('token-toggle');
 const tokenRemember = el('token-remember');
 const tokenConnectBtn = el('token-connect');
 const tokenStatus = el('token-status');
 
-const repoSection = el('section-repo');
-const repoOwnerInput = el('repo-owner');
-const repoNameInput = el('repo-name');
-const repoPrivateCheckbox = el('repo-private');
-const repoConnectBtn = el('repo-connect');
-const repoStatus = el('repo-status');
-
 const uploadSection = el('section-upload');
-const videoTitleInput = el('video-title');
-const videoDescriptionInput = el('video-description');
+const pathwayVideoBtn = el('pathway-video-btn');
+const pathwayUrlBtn = el('pathway-url-btn');
+const pathwayVideoDiv = el('pathway-video');
+const pathwayUrlDiv = el('pathway-url');
 const videoFileInput = el('video-file');
 const videoFileInfo = el('video-file-info');
 const videoUploadBtn = el('video-upload');
+const helpxUrlInput = el('helpx-url');
+const helpxSubmitBtn = el('helpx-submit');
 const uploadStatus = el('upload-status');
 
 const resultSection = el('section-result');
-const resultUrlInput = el('result-url');
-const resultCopyBtn = el('result-copy');
-const resultNote = el('result-note');
 const resultOpenLink = el('result-open');
-const resultRecheckBtn = el('result-recheck');
+const resultNote = el('result-note');
+const embedCopyBtn = el('embed-copy');
 
 let client = null;
 let authUser = null;
 let connectedRepo = null;
+let currentEmbedCode = '';
 
 function setStatus(target, message, kind = 'info') {
   target.textContent = message;
@@ -86,51 +87,13 @@ function storeToken(token, remember) {
   else localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
-async function connectToken(token, { silent = false } = {}) {
-  if (!token) {
-    setStatus(tokenStatus, 'Enter your passphrase first.', 'error');
-    return;
-  }
-  setBusy(tokenConnectBtn, true, 'Connecting…', 'Connect');
-  if (!silent) setStatus(tokenStatus, 'Connecting…');
-  try {
-    const candidateClient = createGitHubClient(token);
-    const user = await candidateClient.getAuthenticatedUser();
-    client = candidateClient;
-    authUser = user;
-    storeToken(token, tokenRemember.checked);
-    setStatus(tokenStatus, 'Connected.', 'success');
-    repoOwnerInput.value = repoOwnerInput.value || user.login;
-    repoSection.hidden = false;
-  } catch (err) {
-    client = null;
-    authUser = null;
-    setStatus(tokenStatus, describeError(err), 'error');
-  } finally {
-    setBusy(tokenConnectBtn, false, 'Connecting…', 'Connect');
-  }
-}
-
-tokenToggle.addEventListener('click', () => {
-  const showing = tokenInput.type === 'text';
-  tokenInput.type = showing ? 'password' : 'text';
-  tokenToggle.textContent = showing ? 'Show' : 'Hide';
-});
-
-tokenConnectBtn.addEventListener('click', () => connectToken(tokenInput.value.trim()));
-
 async function ensurePagesReady(owner, repoName, defaultBranch) {
   let pages = await client.getPagesInfo(owner, repoName);
 
   if (!pages) {
     pages = await client.enablePages(owner, repoName, defaultBranch, '/');
-    setStatus(repoStatus, 'Connected. This may take a few minutes to finish setting up.', 'success');
   } else if (pages.build_type === 'workflow') {
-    throw new Error("This destination can't be used right now. Please choose a different one.");
-  } else if (pages.source && pages.source.branch !== defaultBranch) {
-    setStatus(repoStatus, "Connected, but this destination may not update correctly. Consider using a different one.", 'error');
-  } else {
-    setStatus(repoStatus, 'Connected.', 'success');
+    throw new Error("This destination can't be used right now.");
   }
 
   const marker = await client.getFileMeta(owner, repoName, '.nojekyll');
@@ -145,78 +108,90 @@ async function ensurePagesReady(owner, repoName, defaultBranch) {
   return pages;
 }
 
-async function connectRepo(owner, repoName, makePrivate) {
-  if (!client) {
-    setStatus(repoStatus, 'Connect first.', 'error');
-    return;
-  }
-  if (!owner || !repoName) {
-    setStatus(repoStatus, 'Enter both fields to continue.', 'error');
-    return;
-  }
+async function connectFixedDestination() {
+  let repo = await client.getRepo(FIXED_OWNER, FIXED_REPO);
 
-  setBusy(repoConnectBtn, true, 'Connecting…', 'Continue');
-  setStatus(repoStatus, 'Checking…');
-  connectedRepo = null;
-  uploadSection.hidden = true;
-  resultSection.hidden = true;
-  try {
-    let repo = await client.getRepo(owner, repoName);
-
-    if (!repo) {
-      try {
-        if (owner.toLowerCase() === authUser.login.toLowerCase()) {
-          setStatus(repoStatus, 'Setting up…');
-          repo = await client.createUserRepo(repoName, { isPrivate: makePrivate });
+  if (!repo) {
+    try {
+      if (FIXED_OWNER.toLowerCase() === authUser.login.toLowerCase()) {
+        repo = await client.createUserRepo(FIXED_REPO, { isPrivate: false });
+      } else {
+        const accountType = await client.getAccountType(FIXED_OWNER);
+        if (accountType === 'Organization') {
+          repo = await client.createOrgRepo(FIXED_OWNER, FIXED_REPO, { isPrivate: false });
         } else {
-          const accountType = await client.getAccountType(owner);
-          if (accountType === 'Organization') {
-            setStatus(repoStatus, 'Setting up…');
-            repo = await client.createOrgRepo(owner, repoName, { isPrivate: makePrivate });
-          } else {
-            throw new Error("Couldn't find that account. Check the details and try again.");
-          }
+          throw new Error("Couldn't set up. Please try again later.");
         }
-      } catch (err) {
-        if (err instanceof GitHubApiError && (err.status === 403 || err.status === 404)) {
-          throw new Error("Couldn't set that up automatically. Ask whoever manages this tool to create it, then try again.");
-        }
-        throw err;
       }
+    } catch (err) {
+      if (err instanceof GitHubApiError && (err.status === 403 || err.status === 404)) {
+        throw new Error("Couldn't set up automatically. Please try again later.");
+      }
+      throw err;
     }
+  }
 
-    setStatus(repoStatus, 'Almost there…');
-    const pages = await ensurePagesReady(owner, repo.name, repo.default_branch);
+  const pages = await ensurePagesReady(FIXED_OWNER, repo.name, repo.default_branch);
 
-    connectedRepo = {
-      owner,
-      repoName: repo.name,
-      defaultBranch: repo.default_branch,
-      pagesUrl: pages.html_url,
-    };
+  connectedRepo = {
+    owner: FIXED_OWNER,
+    repoName: repo.name,
+    defaultBranch: repo.default_branch,
+    pagesUrl: pages.html_url,
+  };
+}
 
+async function connectToken(token, { silent = false } = {}) {
+  if (!token) {
+    setStatus(tokenStatus, 'Enter your passphrase first.', 'error');
+    return;
+  }
+  setBusy(tokenConnectBtn, true, 'Connecting…', 'Connect');
+  if (!silent) setStatus(tokenStatus, 'Connecting…');
+  try {
+    const candidateClient = createGitHubClient(token);
+    const user = await candidateClient.getAuthenticatedUser();
+    client = candidateClient;
+    authUser = user;
+    storeToken(token, tokenRemember.checked);
+
+    setStatus(tokenStatus, 'Setting up…');
+    await connectFixedDestination();
+
+    tokenSection.hidden = true;
     uploadSection.hidden = false;
   } catch (err) {
-    setStatus(repoStatus, describeError(err), 'error');
+    client = null;
+    authUser = null;
+    connectedRepo = null;
+    setStatus(tokenStatus, describeError(err), 'error');
   } finally {
-    setBusy(repoConnectBtn, false, 'Connecting…', 'Continue');
+    setBusy(tokenConnectBtn, false, 'Connecting…', 'Connect');
   }
 }
 
-repoConnectBtn.addEventListener('click', () =>
-  connectRepo(repoOwnerInput.value.trim(), repoNameInput.value.trim(), repoPrivateCheckbox.checked)
-);
+tokenToggle.addEventListener('click', () => {
+  const showing = tokenInput.type === 'text';
+  tokenInput.type = showing ? 'password' : 'text';
+  tokenToggle.textContent = showing ? 'Show' : 'Hide';
+});
+
+tokenConnectBtn.addEventListener('click', () => connectToken(tokenInput.value.trim()));
+
+function setPathway(showVideo) {
+  pathwayVideoDiv.hidden = !showVideo;
+  pathwayUrlDiv.hidden = showVideo;
+  pathwayVideoBtn.classList.toggle('active', showVideo);
+  pathwayUrlBtn.classList.toggle('active', !showVideo);
+  setStatus(uploadStatus, '');
+}
+
+pathwayVideoBtn.addEventListener('click', () => setPathway(true));
+pathwayUrlBtn.addEventListener('click', () => setPathway(false));
 
 videoFileInput.addEventListener('change', () => {
   const file = videoFileInput.files[0];
-  if (!file) {
-    videoFileInfo.textContent = '';
-    return;
-  }
-  videoFileInfo.textContent = `${file.name} — ${formatBytes(file.size)}`;
-  if (!videoTitleInput.value) {
-    videoTitleInput.value = file.name.replace(/\.[^.]+$/, '');
-  }
+  videoFileInfo.textContent = file ? `${file.name} — ${formatBytes(file.size)}` : '';
 });
 
 async function findFreeSlug(owner, repoName, baseSlug, ext) {
@@ -229,22 +204,20 @@ async function findFreeSlug(owner, repoName, baseSlug, ext) {
     if (!videoMeta && !pageMeta) return { slug: candidate, resumeVideoOnly: false };
     if (videoMeta && !pageMeta) return { slug: candidate, resumeVideoOnly: true };
   }
-  throw new Error("Couldn't find an available name for this upload — try a different title.");
+  throw new Error("Couldn't find an available name for this upload — try again.");
 }
 
-function showResult(url, owner, repoName) {
+function showResult(url) {
   resultSection.hidden = false;
-  resultUrlInput.value = url;
   resultOpenLink.href = url;
   resultNote.textContent = "This may take a minute or two to go live. If the link doesn't work yet, try again shortly.";
-  resultSection.dataset.owner = owner;
-  resultSection.dataset.repoName = repoName;
+  currentEmbedCode = buildEmbedCode(url);
   resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-async function uploadVideo(title, description, file) {
+async function uploadVideo(file) {
   if (!connectedRepo) {
-    setStatus(uploadStatus, 'Choose a destination first.', 'error');
+    setStatus(uploadStatus, 'Please reconnect and try again.', 'error');
     return;
   }
   if (!file) {
@@ -256,7 +229,7 @@ async function uploadVideo(title, description, file) {
     return;
   }
 
-  const effectiveTitle = title || file.name.replace(/\.[^.]+$/, '');
+  const effectiveTitle = file.name.replace(/\.[^.]+$/, '') || 'untitled';
   const ext = getFileExtension(file);
   const { owner, repoName, defaultBranch, pagesUrl } = connectedRepo;
 
@@ -287,7 +260,7 @@ async function uploadVideo(title, description, file) {
     }
 
     setStatus(uploadStatus, 'Publishing…');
-    const pageHtml = buildVideoPageHtml({ title: effectiveTitle, description, videoFileName: `video.${ext}` });
+    const pageHtml = buildVideoPageHtml({ title: effectiveTitle, description: '', videoFileName: `video.${ext}` });
     await client.putFileContents(owner, repoName, pagePath, {
       message: `Add page for: ${effectiveTitle}`,
       contentBase64: encodeTextToBase64(pageHtml),
@@ -295,7 +268,7 @@ async function uploadVideo(title, description, file) {
     });
 
     const shareUrl = new URL(`media/${slug}/`, pagesUrl).toString();
-    showResult(shareUrl, owner, repoName);
+    showResult(shareUrl);
     setStatus(uploadStatus, 'Done.', 'success');
   } catch (err) {
     setStatus(uploadStatus, describeError(err), 'error');
@@ -304,39 +277,64 @@ async function uploadVideo(title, description, file) {
   }
 }
 
-videoUploadBtn.addEventListener('click', () =>
-  uploadVideo(videoTitleInput.value.trim(), videoDescriptionInput.value.trim(), videoFileInput.files[0])
-);
+videoUploadBtn.addEventListener('click', () => uploadVideo(videoFileInput.files[0]));
 
-resultCopyBtn.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(resultUrlInput.value);
-    resultCopyBtn.textContent = 'Copied!';
-    setTimeout(() => (resultCopyBtn.textContent = 'Copy'), 1500);
-  } catch {
-    resultUrlInput.select();
+async function handleHelpxSubmit(rawInput) {
+  const input = rawInput.trim();
+  if (!input) {
+    setStatus(uploadStatus, 'Paste a page link first.', 'error');
+    return;
   }
-});
 
-resultRecheckBtn.addEventListener('click', async () => {
-  const { owner, repoName } = resultSection.dataset;
-  if (!owner || !repoName || !client) return;
-  resultRecheckBtn.disabled = true;
-  resultRecheckBtn.textContent = 'Checking…';
+  setBusy(helpxSubmitBtn, true, 'Fetching…', 'Get link');
   try {
-    const pages = await client.getPagesInfo(owner, repoName);
-    if (pages?.status === 'built') {
-      resultNote.textContent = "It's live.";
-    } else if (pages?.status === 'errored') {
-      resultNote.textContent = 'Something went wrong. Please try again.';
-    } else {
-      resultNote.textContent = 'Still on its way — try again shortly.';
+    if (looksLikeDirectVideoUrl(input)) {
+      showResult(input);
+      setStatus(uploadStatus, 'Done.', 'success');
+      return;
     }
-  } catch (err) {
-    resultNote.textContent = describeError(err);
+
+    setStatus(uploadStatus, 'Fetching…');
+    let html;
+    try {
+      const response = await fetch(input);
+      if (!response.ok) throw new Error('fetch-failed');
+      html = await response.text();
+    } catch {
+      setStatus(
+        uploadStatus,
+        "Couldn't read that page automatically. Open it, find the video, and paste the direct video link here instead.",
+        'error'
+      );
+      return;
+    }
+
+    const found = extractM3u8Url(html);
+    if (!found) {
+      setStatus(
+        uploadStatus,
+        "Couldn't find a video on that page. Open it, find the video, and paste the direct video link here instead.",
+        'error'
+      );
+      return;
+    }
+
+    showResult(found);
+    setStatus(uploadStatus, 'Done.', 'success');
   } finally {
-    resultRecheckBtn.disabled = false;
-    resultRecheckBtn.textContent = 'Check again';
+    setBusy(helpxSubmitBtn, false, 'Fetching…', 'Get link');
+  }
+}
+
+helpxSubmitBtn.addEventListener('click', () => handleHelpxSubmit(helpxUrlInput.value));
+
+embedCopyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(currentEmbedCode);
+    embedCopyBtn.textContent = 'Copied!';
+    setTimeout(() => (embedCopyBtn.textContent = 'Copy embed code'), 1500);
+  } catch {
+    setStatus(uploadStatus, "Couldn't copy automatically.", 'error');
   }
 });
 

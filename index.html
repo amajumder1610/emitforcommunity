@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com; img-src 'self'; style-src 'self'; script-src 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://api.github.com https://helpx.adobe.com; img-src 'self'; style-src 'self'; script-src 'self';">
 <title>EMIT</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="hero">
     <h1>EMIT</h1>
-    <p class="tagline">Share a video with a link.</p>
+    <p class="tagline">Embed Media Ingest Tool for Gainsight</p>
   </div>
 
   <main class="page">
@@ -28,54 +28,35 @@
       <p id="token-status" class="status" role="status"></p>
     </section>
 
-    <section id="section-repo" class="card" hidden>
-      <h2>Destination</h2>
-      <div class="row">
-        <div class="field">
-          <label for="repo-owner">Account</label>
-          <input id="repo-owner" type="text" placeholder="account" />
-        </div>
-        <div class="field">
-          <label for="repo-name">Project</label>
-          <input id="repo-name" type="text" placeholder="project-name" />
-        </div>
-      </div>
-      <label class="checkbox-row">
-        <input id="repo-private" type="checkbox" />
-        <span>Keep private</span>
-      </label>
-      <button id="repo-connect" type="button" class="btn-primary">Continue</button>
-      <p id="repo-status" class="status" role="status"></p>
-    </section>
-
     <section id="section-upload" class="card" hidden>
       <h2>Upload</h2>
-      <label for="video-title">Title</label>
-      <input id="video-title" type="text" placeholder="Q3 customer story" />
 
-      <label for="video-description">Description (optional)</label>
-      <textarea id="video-description" rows="3" placeholder="A short description shown on the page"></textarea>
+      <div class="pathway-toggle">
+        <button id="pathway-video-btn" type="button" class="pathway-btn active">Upload a video</button>
+        <button id="pathway-url-btn" type="button" class="pathway-btn">From a page link</button>
+      </div>
 
-      <label for="video-file">Video file</label>
-      <input id="video-file" type="file" accept="video/*" />
-      <p id="video-file-info" class="status-muted"></p>
+      <div id="pathway-video">
+        <label for="video-file">Video file</label>
+        <input id="video-file" type="file" accept="video/*" />
+        <p id="video-file-info" class="status-muted"></p>
+        <button id="video-upload" type="button" class="btn-primary">Upload</button>
+      </div>
 
-      <button id="video-upload" type="button" class="btn-primary">Upload</button>
+      <div id="pathway-url" hidden>
+        <label for="helpx-url">Page link</label>
+        <input id="helpx-url" type="text" placeholder="https://helpx.adobe.com/..." />
+        <button id="helpx-submit" type="button" class="btn-primary">Get link</button>
+      </div>
+
       <p id="upload-status" class="status" role="status"></p>
     </section>
 
     <section id="section-result" class="card" hidden>
       <h2>Done</h2>
-      <p>Your link:</p>
-      <div class="row">
-        <input id="result-url" type="text" readonly />
-        <button id="result-copy" type="button" class="btn-secondary">Copy</button>
-      </div>
+      <a id="result-open" href="#" target="_blank" rel="noopener noreferrer" class="btn-primary">Open link</a>
       <p id="result-note" class="status-muted"></p>
-      <div class="row">
-        <a id="result-open" href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary">Open link</a>
-        <button id="result-recheck" type="button" class="btn-secondary">Check again</button>
-      </div>
+      <button id="embed-copy" type="button" class="btn-secondary">Copy embed code</button>
     </section>
   </main>
 

@@ -30,9 +30,6 @@ html, body {
 }
 
 .hero {
-  background: linear-gradient(120deg, #ff3d68, #b620e0, #6d5ef5, #2f9bff, #00c9c8, #ff3d68);
-  background-size: 300% 300%;
-  animation: emit-gradient 16s ease infinite;
   padding: 100px 20px 90px;
   text-align: center;
 }
@@ -42,24 +39,28 @@ html, body {
   font-size: clamp(3.5rem, 14vw, 7rem);
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #fff;
-  text-shadow: 0 4px 30px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(90deg, #f92c8b, #ff3d3d, #ff9f3d, #ffe93d, #4ade80, #3dd9e0, #3d8bff, #8b3dff, #f92c8b);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: emit-gradient 10s linear infinite;
 }
 
 .tagline {
   margin: 12px 0 0;
   font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--muted);
 }
 
 @keyframes emit-gradient {
   0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero {
+  .hero h1 {
     animation: none;
   }
 }
@@ -127,10 +128,6 @@ textarea {
   flex: 1;
 }
 
-.field {
-  flex: 1;
-}
-
 .checkbox-row {
   display: flex;
   align-items: flex-start;
@@ -193,8 +190,30 @@ button, .btn-primary, .btn-secondary {
   color: var(--success);
 }
 
-#result-url {
+.pathway-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pathway-btn {
   flex: 1;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.85rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.pathway-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+#section-result .btn-primary {
+  display: inline-block;
+}
+
+#embed-copy {
+  margin-top: 14px;
 }
