@@ -4,9 +4,10 @@ Embed Media Ingest Tool for Gainsight — get a shareable link (and embed code) 
 
 ## Usage
 
-1. Enter your passphrase and connect.
-2. Either upload a video, or paste a page link to pull a video from.
-3. Open your link, or copy the embed code to paste elsewhere.
+1. Choose the product the video is for.
+2. Enter your passphrase and connect.
+3. Either upload a video, or paste a page link to pull a video from.
+4. Open your link, or copy the embed code to paste elsewhere.
 
 Don't have a passphrase? Ask whoever manages this tool for one.
 

@@ -13,6 +13,8 @@ const FIXED_REPO = 'emitforcommunity';
 
 const el = (id) => document.getElementById(id);
 
+const productSelect = el('product-select');
+
 const tokenSection = el('section-token');
 const tokenInput = el('token-input');
 const tokenToggle = el('token-toggle');
@@ -194,25 +196,67 @@ videoFileInput.addEventListener('change', () => {
   videoFileInfo.textContent = file ? `${file.name} — ${formatBytes(file.size)}` : '';
 });
 
-async function findFreeSlug(owner, repoName, baseSlug, ext) {
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    const candidate = withSuffix(baseSlug, attempt);
-    const [videoMeta, pageMeta] = await Promise.all([
-      client.getFileMeta(owner, repoName, `media/${candidate}/video.${ext}`),
-      client.getFileMeta(owner, repoName, `media/${candidate}/index.html`),
-    ]);
-    if (!videoMeta && !pageMeta) return { slug: candidate, resumeVideoOnly: false };
-    if (videoMeta && !pageMeta) return { slug: candidate, resumeVideoOnly: true };
-  }
-  throw new Error("Couldn't find an available name for this upload — try again.");
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function showResult(url) {
+async function findFreeUploadFolder(owner, repoName, productSlug, ext) {
+  const baseDate = todayIsoDate();
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    const dateSegment = withSuffix(baseDate, attempt);
+    const folder = `media/${productSlug}/${dateSegment}`;
+    const [videoMeta, pageMeta] = await Promise.all([
+      client.getFileMeta(owner, repoName, `${folder}/video.${ext}`),
+      client.getFileMeta(owner, repoName, `${folder}/index.html`),
+    ]);
+    if (!videoMeta && !pageMeta) return { folder, resumeVideoOnly: false };
+    if (videoMeta && !pageMeta) return { folder, resumeVideoOnly: true };
+  }
+  throw new Error("Couldn't find an available slot for this upload — try again.");
+}
+
+let resultGeneration = 0;
+
+function showResult(url, pollTarget) {
+  resultGeneration += 1;
+  const generation = resultGeneration;
+
   resultSection.hidden = false;
   resultOpenLink.href = url;
-  resultNote.textContent = "This may take a minute or two to go live. If the link doesn't work yet, try again shortly.";
   currentEmbedCode = buildEmbedCode(url);
   resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (pollTarget) {
+    resultNote.textContent = 'Processing…';
+    pollDeploymentStatus(pollTarget.owner, pollTarget.repoName, generation);
+  } else {
+    resultNote.textContent = 'Live.';
+  }
+}
+
+async function pollDeploymentStatus(owner, repoName, generation) {
+  const deadline = Date.now() + 3 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+    if (generation !== resultGeneration) return;
+    try {
+      const pages = await client.getPagesInfo(owner, repoName);
+      if (generation !== resultGeneration) return;
+      if (pages?.status === 'built') {
+        resultNote.textContent = 'Live.';
+        return;
+      }
+      if (pages?.status === 'errored') {
+        resultNote.textContent = 'Something went wrong. Please try again.';
+        return;
+      }
+    } catch {
+      // transient error while polling; keep trying until the deadline
+    }
+  }
+  if (generation === resultGeneration) {
+    resultNote.textContent = 'Still processing — the link will work once ready.';
+  }
 }
 
 async function uploadVideo(file) {
@@ -229,8 +273,9 @@ async function uploadVideo(file) {
     return;
   }
 
-  const effectiveTitle = file.name.replace(/\.[^.]+$/, '') || 'untitled';
+  const fileTitle = file.name.replace(/\.[^.]+$/, '') || 'untitled';
   const ext = getFileExtension(file);
+  const productSlug = slugify(productSelect.value);
   const { owner, repoName, defaultBranch, pagesUrl } = connectedRepo;
 
   setBusy(videoUploadBtn, true, 'Uploading…', 'Upload');
@@ -239,10 +284,9 @@ async function uploadVideo(file) {
       setStatus(uploadStatus, 'This is a large file — it may take a while.');
     }
 
-    const baseSlug = slugify(effectiveTitle);
-    const { slug, resumeVideoOnly } = await findFreeSlug(owner, repoName, baseSlug, ext);
-    const videoPath = `media/${slug}/video.${ext}`;
-    const pagePath = `media/${slug}/index.html`;
+    const { folder, resumeVideoOnly } = await findFreeUploadFolder(owner, repoName, productSlug, ext);
+    const videoPath = `${folder}/video.${ext}`;
+    const pagePath = `${folder}/index.html`;
 
     if (!resumeVideoOnly) {
       setStatus(uploadStatus, 'Preparing…');
@@ -251,7 +295,7 @@ async function uploadVideo(file) {
       });
       setStatus(uploadStatus, 'Uploading…');
       await client.putFileContents(owner, repoName, videoPath, {
-        message: `Add video: ${effectiveTitle}`,
+        message: `Add video: ${fileTitle}`,
         contentBase64,
         branch: defaultBranch,
       });
@@ -260,15 +304,15 @@ async function uploadVideo(file) {
     }
 
     setStatus(uploadStatus, 'Publishing…');
-    const pageHtml = buildVideoPageHtml({ title: effectiveTitle, description: '', videoFileName: `video.${ext}` });
+    const pageHtml = buildVideoPageHtml({ title: fileTitle, videoFileName: `video.${ext}` });
     await client.putFileContents(owner, repoName, pagePath, {
-      message: `Add page for: ${effectiveTitle}`,
+      message: `Add page for: ${fileTitle}`,
       contentBase64: encodeTextToBase64(pageHtml),
       branch: defaultBranch,
     });
 
-    const shareUrl = new URL(`media/${slug}/`, pagesUrl).toString();
-    showResult(shareUrl);
+    const shareUrl = new URL(`${folder}/`, pagesUrl).toString();
+    showResult(shareUrl, { owner, repoName });
     setStatus(uploadStatus, 'Done.', 'success');
   } catch (err) {
     setStatus(uploadStatus, describeError(err), 'error');
