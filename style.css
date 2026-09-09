@@ -26,19 +26,20 @@ html, body {
 .page {
   max-width: 640px;
   margin: 0 auto;
-  padding: 32px 20px 64px;
+  padding: 20px 20px 56px;
 }
 
 .hero {
-  padding: 100px 20px 90px;
+  padding: 44px 20px 32px;
   text-align: center;
 }
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(3.5rem, 14vw, 7rem);
+  font-size: clamp(2.75rem, 9vw, 4.5rem);
   font-weight: 800;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  line-height: 1;
   background: linear-gradient(90deg, #f92c8b, #ff3d3d, #ff9f3d, #ffe93d, #4ade80, #3dd9e0, #3d8bff, #8b3dff, #f92c8b);
   background-size: 300% 100%;
   -webkit-background-clip: text;
@@ -49,8 +50,8 @@ html, body {
 }
 
 .tagline {
-  margin: 12px 0 0;
-  font-size: 1.1rem;
+  margin: 8px 0 0;
+  font-size: 0.95rem;
   color: var(--muted);
 }
 
@@ -77,6 +78,7 @@ html, body {
   border-radius: 10px;
   padding: 20px;
   margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
 .card h2 {
