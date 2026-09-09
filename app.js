@@ -228,28 +228,37 @@ function showResult(url, pollTarget) {
 
   if (pollTarget) {
     resultNote.textContent = 'Processing…';
-    pollDeploymentStatus(pollTarget.owner, pollTarget.repoName, generation);
+    pollDeploymentStatus(pollTarget.owner, pollTarget.repoName, generation, pollTarget.committedAt);
   } else {
     resultNote.textContent = 'Live.';
   }
 }
 
-async function pollDeploymentStatus(owner, repoName, generation) {
+// Checks the build tied to our specific commit, not just the site's overall
+// status — the site-wide status can still read "built" from an earlier
+// deploy for a few seconds after we push, before GitHub even starts a new
+// build for this commit, which was reporting "Live" too early.
+async function pollDeploymentStatus(owner, repoName, generation, committedAt) {
+  const committedAtMs = new Date(committedAt).getTime();
   const deadline = Date.now() + 3 * 60 * 1000;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 6000));
     if (generation !== resultGeneration) return;
     try {
-      const pages = await client.getPagesInfo(owner, repoName);
+      const build = await client.getLatestPagesBuild(owner, repoName);
       if (generation !== resultGeneration) return;
-      if (pages?.status === 'built') {
-        resultNote.textContent = 'Live.';
-        return;
+      const buildCoversOurCommit = build && new Date(build.updated_at).getTime() >= committedAtMs;
+      if (buildCoversOurCommit) {
+        if (build.status === 'built') {
+          resultNote.textContent = 'Live.';
+          return;
+        }
+        if (build.status === 'errored') {
+          resultNote.textContent = 'Something went wrong. Please try again.';
+          return;
+        }
       }
-      if (pages?.status === 'errored') {
-        resultNote.textContent = 'Something went wrong. Please try again.';
-        return;
-      }
+      // else: no build yet for our commit (still queued) — keep polling
     } catch {
       // transient error while polling; keep trying until the deadline
     }
@@ -305,14 +314,15 @@ async function uploadVideo(file) {
 
     setStatus(uploadStatus, 'Publishing…');
     const pageHtml = buildVideoPageHtml({ title: fileTitle, videoFileName: `video.${ext}` });
-    await client.putFileContents(owner, repoName, pagePath, {
+    const pageCommit = await client.putFileContents(owner, repoName, pagePath, {
       message: `Add page for: ${fileTitle}`,
       contentBase64: encodeTextToBase64(pageHtml),
       branch: defaultBranch,
     });
 
+    const committedAt = pageCommit?.commit?.committer?.date || new Date().toISOString();
     const shareUrl = new URL(`${folder}/`, pagesUrl).toString();
-    showResult(shareUrl, { owner, repoName });
+    showResult(shareUrl, { owner, repoName, committedAt });
     setStatus(uploadStatus, 'Done.', 'success');
   } catch (err) {
     setStatus(uploadStatus, describeError(err), 'error');
